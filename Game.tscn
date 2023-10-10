@@ -1,7 +1,8 @@
-[gd_scene load_steps=19 format=3 uid="uid://c76ip8vuk2pid"]
+[gd_scene load_steps=22 format=3 uid="uid://c76ip8vuk2pid"]
 
 [ext_resource type="Script" path="res://Brick/Brick_Container.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://d3o7nr1d2l1p" path="res://Paddle/Paddle.tscn" id="2"]
+[ext_resource type="Script" path="res://Effects/Background.gd" id="2_5ox7c"]
 [ext_resource type="Script" path="res://Ball/Ball_Container.gd" id="3"]
 [ext_resource type="Script" path="res://Game.gd" id="4"]
 [ext_resource type="PackedScene" uid="uid://ckbnb3u065ncy" path="res://UI/Pause_Menu.tscn" id="5"]
@@ -9,13 +10,109 @@
 [ext_resource type="PackedScene" uid="uid://drxwrc1b5f0hw" path="res://UI/HUD.tscn" id="7"]
 [ext_resource type="PackedScene" uid="uid://y45cm1yl1uhq" path="res://UI/Instructions.tscn" id="8"]
 [ext_resource type="Script" path="res://Effects/Camera.gd" id="9"]
-[ext_resource type="AudioStream" uid="uid://bqqr37bnegkev" path="res://Assets/music.mp3" id="10"]
+[ext_resource type="AudioStream" uid="uid://bt5simj3d6g7v" path="res://Assets/music.mp3" id="10"]
 [ext_resource type="Script" path="res://Ball/Comet_Container.gd" id="11"]
-[ext_resource type="AudioStream" uid="uid://o4r4ax8aiqr2" path="res://Assets/brick.wav" id="12"]
-[ext_resource type="AudioStream" uid="uid://d02p55sfg7do0" path="res://Assets/die.wav" id="13"]
-[ext_resource type="AudioStream" uid="uid://dhll3cyxdsquc" path="res://Assets/wall.wav" id="14"]
-[ext_resource type="AudioStream" uid="uid://dpmtu8nfvrw7b" path="res://Assets/paddle.wav" id="15"]
+[ext_resource type="AudioStream" uid="uid://bvygqh6wqkbct" path="res://Assets/brick.wav" id="12"]
+[ext_resource type="AudioStream" uid="uid://dviguoqkop0m4" path="res://Assets/die.wav" id="13"]
+[ext_resource type="AudioStream" uid="uid://iqiwr28dla55" path="res://Assets/wall.wav" id="14"]
+[ext_resource type="AudioStream" uid="uid://dnf6k1y1onr2" path="res://Assets/paddle.wav" id="15"]
 [ext_resource type="Script" path="res://Effects/Fever.gd" id="16"]
+
+[sub_resource type="Shader" id="Shader_ivln4"]
+code = "// Fireworks shader
+// Based on shadertoy shader by Martijn Steinrucken aka BigWings - 2015 
+// (https://www.shadertoy.com/view/lscGRl)
+
+shader_type canvas_item;
+
+uniform float TWOPI = 6.283185307179586 ;
+uniform float NUM_EXPLOSIONS = 8.0;
+uniform float NUM_PARTICLES = 70.0;
+
+// Noise functions by Dave Hoskins
+
+uniform vec3 MOD3 = vec3(0.1031,0.11369,0.13787);
+
+vec3 hash31(float p) {
+	vec3 p3 = fract(vec3(p) * MOD3);
+	p3 += dot(p3, p3.yzx + 19.19);
+	return fract(vec3((p3.x + p3.y)*p3.z, (p3.x+p3.z)*p3.y, (p3.y+p3.z)*p3.x));
+}
+
+float hash12(vec2 p) // attention changement vec2 p en vec3
+{
+	vec3 p3  = fract(vec3(p.xy, 0.0) * MOD3);
+	p3 += dot(p3, p3.yzx + 19.19);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+float circ(vec2 uv, vec2 pos, float size) {
+	uv -= pos;
+	size *= size;
+	return smoothstep(size*1.1, size, dot(uv, uv));
+}
+
+float lighter(vec2 uv, vec2 pos, float size) {
+	uv -= pos;
+	size *= size;
+	return size/dot(uv, uv);
+}
+
+vec3 explosion(vec2 uv, vec2 p, float seed, float t) {
+	vec3 col = vec3(0.);
+	vec3 en = hash31(seed);
+	vec3 baseCol = en;
+	for(float i=0.; i<NUM_PARTICLES; i++) {
+		vec3 n = hash31(i)-.5;
+		vec2 startP = p-vec2(0., t*t*.1);        
+		vec2 endP = startP+normalize(n.xy)*n.z;
+		float pt = 1.-pow(t-1., 2.);
+		vec2 pos = mix(p, endP, pt);    
+		float size = mix(.01, .005, smoothstep(0., .1, pt));
+		size *= smoothstep(1., .1, pt);
+		float sparkle = (sin((pt+n.z)*100.)*.5+.5);
+		sparkle = pow(sparkle, pow(en.x, 3.)*50.)*mix(0.01, .01, en.y*n.y);
+		float B = smoothstep(en.x-en.z, en.x+en.z, t)*smoothstep(en.y+en.z, en.y-en.z, t);
+		size += sparkle*B;
+		col += baseCol*lighter(uv, pos, size);
+	}
+	return col;
+}
+
+
+void fragment() {
+	vec2 iResolution = vec2(1024,600);
+	vec2 uv = FRAGCOORD.xy / iResolution.xy;
+	uv.x -= .5;
+	uv.x *= iResolution.x/iResolution.y;
+
+	float n = hash12(uv+10.0);
+	float t = TIME*.5;
+
+	vec3 c = vec3(0.);
+
+	for(float i=0.; i<NUM_EXPLOSIONS; i++) {
+		float et = t+i*1234.45235;
+		float id = floor(et);
+		et -= id;
+		
+		vec2 p = hash31(id).xy;
+		p.x -= .5;
+		p.x *= 1.6;
+		c += explosion(uv, p, id, et);
+	}
+
+	float alpha = 1.0;
+	COLOR = vec4(c, alpha);
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_fvqj5"]
+shader = SubResource("Shader_ivln4")
+shader_parameter/TWOPI = 6.28319
+shader_parameter/NUM_EXPLOSIONS = 8.0
+shader_parameter/NUM_PARTICLES = 70.0
+shader_parameter/MOD3 = Vector3(0.1031, 0.11369, 0.13787)
 
 [sub_resource type="RectangleShape2D" id="1"]
 size = Vector2(200, 1000)
@@ -27,9 +124,12 @@ size = Vector2(1224, 200)
 script = ExtResource("4")
 
 [node name="Background" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_fvqj5")
+use_parent_material = true
 offset_right = 1024.0
 offset_bottom = 800.0
 color = Color(0.333333, 0.333333, 0.333333, 1)
+script = ExtResource("2_5ox7c")
 
 [node name="Comet_Container" type="Node2D" parent="."]
 script = ExtResource("11")
